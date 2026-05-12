@@ -172,7 +172,9 @@ class WorkbenchRouteTests(unittest.TestCase):
 
         with (
             patch.object(workbench.github_client, "installation_token", return_value=SimpleNamespace(token="server-token")),
+            patch.object(workbench.github_client, "get_issue", return_value={"id": 1, "number": 7, "title": "Bug", "body": "", "html_url": "https://github.com/agentaway/demo/issues/7"}),
             patch.object(workbench.github_client, "create_issue_comment", side_effect=fake_comment),
+            patch.object(workbench, "enqueue_agent_run", return_value="task-1"),
         ):
             response = self.client.post(
                 f"/api/repositories/{self.repository.id}/issues/7/commands",
@@ -182,6 +184,8 @@ class WorkbenchRouteTests(unittest.TestCase):
         self.assertEqual(response.status_code, 201)
         self.assertEqual(posted["body"], "/plan add tests max 2 files")
         self.assertEqual(response.json()["command"]["command"], "plan")
+        self.assertTrue(response.json()["agent_run_id"])
+        self.assertEqual(response.json()["run_task_id"], "task-1")
 
     def test_create_issue_can_include_initial_plan_command(self) -> None:
         calls: list[tuple[str, int | None, str]] = []
@@ -198,6 +202,7 @@ class WorkbenchRouteTests(unittest.TestCase):
             patch.object(workbench.github_client, "installation_token", return_value=SimpleNamespace(token="server-token")),
             patch.object(workbench.github_client, "create_issue", side_effect=fake_create_issue),
             patch.object(workbench.github_client, "create_issue_comment", side_effect=fake_comment),
+            patch.object(workbench, "enqueue_agent_run", return_value="task-1"),
         ):
             response = self.client.post(
                 f"/api/repositories/{self.repository.id}/issues",
@@ -206,6 +211,7 @@ class WorkbenchRouteTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 201)
         self.assertEqual(calls, [("issue", None, "Improve mobile"), ("comment", 8, "/plan add tests max 2 files")])
+        self.assertTrue(response.json()["agent_run_id"])
 
 
 if __name__ == "__main__":

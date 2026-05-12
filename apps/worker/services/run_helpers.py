@@ -42,6 +42,9 @@ def prepare_github_token(connection: Any, run: dict[str, Any]) -> str | None:
         return None
 
     token = github_app.installation_token(int(installation_id)).token
+    if run.get("trigger_type") in {"web_workbench_command", "api_v1_command"}:
+        return token
+
     permission = github_app.collaborator_permission(token, run["full_name"], run["trigger_actor"])
     if not permission_allowed(permission):
         update_run(

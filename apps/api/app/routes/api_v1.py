@@ -96,6 +96,8 @@ def create_issue(
         issue = workbench.github_client.create_issue(token, repository.full_name, body.title.strip(), body.body)
         command_comment = None
         parsed_command = None
+        run = None
+        run_task_id = None
         if has_command:
             constraints = body.constraints
             if not constraints and body.first_command in {"plan", "fix"} and not body.raw_command:
@@ -114,19 +116,35 @@ def create_issue(
                 int(issue["number"]),
                 command_text,
             )
+            run = workbench.create_authorized_command_run(
+                session,
+                current_user=current_user,
+                repository=repository,
+                issue=issue,
+                comment=command_comment,
+                parsed=parsed_command,
+                trigger_type="api_v1_command",
+            )
             record_audit(
                 session,
                 user_id=current_user.account.id,
                 action="api_v1.command_posted",
                 target_type="repository",
                 target_id=str(repository.id),
-                payload={"issue_number": issue.get("number"), "command": parsed_command.command},
+                payload={
+                    "issue_number": issue.get("number"),
+                    "command": parsed_command.command,
+                    "agent_run_id": run.id,
+                },
             )
             session.commit()
+            run_task_id = workbench.enqueue_agent_run(run)
         return {
             "issue": workbench.serialize_issue(issue),
             "command_comment": workbench.serialize_comment(command_comment) if command_comment else None,
             "command": parsed_command.to_dict() if parsed_command else None,
+            "agent_run_id": run.id if run else None,
+            "run_task_id": run_task_id,
         }
     except httpx.HTTPStatusError as exc:
         raise workbench.github_error(exc) from exc
@@ -172,22 +190,35 @@ def create_command(
         check_rate_limit(f"high-risk-command:{current_user.account.id}", limit=20)
     token = workbench.installation_token_for_repository(repository)
     try:
+        issue = workbench.github_client.get_issue(token, repository.full_name, issue_number)
         comment = workbench.github_client.create_issue_comment(token, repository.full_name, issue_number, command_text)
     except httpx.HTTPStatusError as exc:
         raise workbench.github_error(exc) from exc
+    run = workbench.create_authorized_command_run(
+        session,
+        current_user=current_user,
+        repository=repository,
+        issue=issue,
+        comment=comment,
+        parsed=parsed,
+        trigger_type="api_v1_command",
+    )
     record_audit(
         session,
         user_id=current_user.account.id,
         action="api_v1.command_posted",
         target_type="repository",
         target_id=str(repository.id),
-        payload={"issue_number": issue_number, "command": parsed.command},
+        payload={"issue_number": issue_number, "command": parsed.command, "agent_run_id": run.id},
     )
     session.commit()
+    run_task_id = workbench.enqueue_agent_run(run)
     return {
         "status": "comment_posted",
         "comment": workbench.serialize_comment(comment),
         "command": parsed.to_dict(),
+        "agent_run_id": run.id,
+        "run_task_id": run_task_id,
     }
 
 

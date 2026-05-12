@@ -168,6 +168,10 @@ def command_from_payload(github_event: str, payload: dict[str, Any]) -> ParsedCo
     if not isinstance(comment, dict):
         return None
 
+    user = comment.get("user") or {}
+    if isinstance(user, dict) and (user.get("type") == "Bot" or str(user.get("login") or "").endswith("[bot]")):
+        return None
+
     return parse_agent_command(comment.get("body"))
 
 

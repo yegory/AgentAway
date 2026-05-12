@@ -53,6 +53,17 @@ class WebhookSignatureTests(unittest.TestCase):
         assert parsed is not None
         self.assertEqual(parsed.command, "fixplan")
 
+    def test_bot_issue_comment_does_not_create_command(self) -> None:
+        payload = {
+            "action": "created",
+            "comment": {
+                "body": "/fix add tests max 2 files",
+                "user": {"login": "agentaway[bot]", "type": "Bot"},
+            },
+        }
+
+        self.assertIsNone(command_from_payload("issue_comment", payload))
+
 
 if __name__ == "__main__":
     unittest.main()

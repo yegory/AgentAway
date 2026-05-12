@@ -138,7 +138,9 @@ class ApiV1RouteTests(unittest.TestCase):
 
         with (
             patch.object(api_v1.workbench.github_client, "installation_token", return_value=SimpleNamespace(token="server-token")),
+            patch.object(api_v1.workbench.github_client, "get_issue", return_value={"id": 1, "number": 7, "title": "Bug", "body": "", "html_url": "https://github.com/agentaway/demo/issues/7"}),
             patch.object(api_v1.workbench.github_client, "create_issue_comment", side_effect=fake_comment),
+            patch.object(api_v1.workbench, "enqueue_agent_run", return_value="task-1"),
         ):
             response = self.client.post(
                 f"/api/v1/repositories/{self.repository.id}/issues/7/commands",
@@ -149,6 +151,8 @@ class ApiV1RouteTests(unittest.TestCase):
         self.assertEqual(response.status_code, 201)
         self.assertEqual(posted["body"], "/plan add tests")
         self.assertEqual(response.json()["command"]["command"], "plan")
+        self.assertTrue(response.json()["agent_run_id"])
+        self.assertEqual(response.json()["run_task_id"], "task-1")
 
 
 if __name__ == "__main__":

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 from typing import Any
+from uuid import uuid4
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -9,6 +10,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 
+from app.celery_app import celery_app
 from app.config import settings
 from app.db import get_session
 from app.models import (
@@ -31,6 +33,12 @@ router = APIRouter(prefix="/api", tags=["workbench"])
 
 HIGH_RISK_COMMANDS = {"fix", "proceed"}
 WORKBENCH_COMMANDS = {"plan", "fixplan", "fix", "proceed"}
+RUN_TASKS = {
+    "plan": "pocket_maintainer.runs.create_plan",
+    "fixplan": "pocket_maintainer.runs.create_plan",
+    "fix": "pocket_maintainer.runs.implement_patch",
+    "proceed": "pocket_maintainer.runs.implement_patch",
+}
 
 
 class IssueCreateRequest(BaseModel):
@@ -155,6 +163,81 @@ def serialize_comment(comment: dict[str, Any]) -> dict[str, object]:
         "created_at": comment.get("created_at") or "",
         "updated_at": comment.get("updated_at") or "",
     }
+
+
+def actor_for_user(current_user: AuthenticatedUser) -> str:
+    account = current_user.account
+    return account.display_name or account.email or account.clerk_user_id
+
+
+def create_authorized_command_run(
+    session: Session,
+    *,
+    current_user: AuthenticatedUser,
+    repository: Repository,
+    issue: dict[str, Any],
+    comment: dict[str, Any],
+    parsed: ParsedCommand,
+    trigger_type: str,
+) -> AgentRun:
+    delivery_id = f"{trigger_type}-{uuid4()}"
+    payload = {
+        "action": "created",
+        "repository": {
+            "id": repository.github_repo_id,
+            "full_name": repository.full_name,
+            "name": repository.name,
+            "default_branch": repository.default_branch,
+            "private": repository.private,
+            "owner": {"login": repository.owner},
+        },
+        "issue": issue,
+        "comment": comment,
+        "sender": {
+            "login": actor_for_user(current_user),
+            "type": "AgentAwayUser",
+        },
+    }
+    event = WebhookEvent(
+        github_delivery_id=delivery_id,
+        github_event=trigger_type,
+        action="created",
+        installation=repository.installation,
+        repository=repository,
+        sender_login=actor_for_user(current_user),
+        payload_json=payload,
+        status="processed",
+    )
+    session.add(event)
+    run = AgentRun(
+        user=current_user.account,
+        repository=repository,
+        issue_number=issue.get("number"),
+        issue_title=issue.get("title") or "",
+        issue_url=issue.get("html_url") or "",
+        comment_url=comment.get("html_url") or "",
+        github_delivery_id=delivery_id,
+        trigger_type=trigger_type,
+        trigger_actor=actor_for_user(current_user),
+        command=parsed.command,
+        status=f"queued_{parsed.command}",
+        plan_json={
+            "command": parsed.to_dict(),
+            "author_association": "WORKBENCH",
+            "github_comment_url": comment.get("html_url") or "",
+        },
+    )
+    session.add(run)
+    session.flush()
+    return run
+
+
+def enqueue_agent_run(run: AgentRun) -> str | None:
+    task_name = RUN_TASKS.get(run.command)
+    if not task_name:
+        return None
+    result = celery_app.send_task(task_name, kwargs={"agent_run_id": run.id})
+    return result.id
 
 
 def github_error(exc: httpx.HTTPStatusError) -> HTTPException:
@@ -461,6 +544,8 @@ def create_issue_for_repository(
     try:
         issue = github_client.create_issue(token, repository.full_name, body.title.strip(), body.body)
         command_comment = None
+        run = None
+        run_task_id = None
         if body.first_command != "none" or (body.raw_command and body.raw_command.strip()):
             constraints = body.constraints
             if not constraints and body.first_command in {"plan", "fix"} and not body.raw_command:
@@ -479,19 +564,31 @@ def create_issue_for_repository(
                 int(issue["number"]),
                 command_text,
             )
+            run = create_authorized_command_run(
+                session,
+                current_user=current_user,
+                repository=repository,
+                issue=issue,
+                comment=command_comment,
+                parsed=parsed,
+                trigger_type="web_workbench_command",
+            )
             record_audit(
                 session,
                 user_id=current_user.account.id,
                 action="workbench.command_posted",
                 target_type="repository",
                 target_id=str(repository.id),
-                payload={"issue_number": issue.get("number"), "command": parsed.command},
+                payload={"issue_number": issue.get("number"), "command": parsed.command, "agent_run_id": run.id},
             )
             session.commit()
+            run_task_id = enqueue_agent_run(run)
             return {
                 "issue": serialize_issue(issue),
                 "command_comment": serialize_comment(command_comment),
                 "command": parsed.to_dict(),
+                "agent_run_id": run.id,
+                "run_task_id": run_task_id,
             }
     except httpx.HTTPStatusError as exc:
         raise github_error(exc) from exc
@@ -584,20 +681,33 @@ def create_command_comment(
         check_rate_limit(f"high-risk-command:{current_user.account.id}", limit=20)
     token = installation_token_for_repository(repository)
     try:
+        issue = github_client.get_issue(token, repository.full_name, issue_number)
         comment = github_client.create_issue_comment(token, repository.full_name, issue_number, command_text)
     except httpx.HTTPStatusError as exc:
         raise github_error(exc) from exc
+    run = create_authorized_command_run(
+        session,
+        current_user=current_user,
+        repository=repository,
+        issue=issue,
+        comment=comment,
+        parsed=parsed,
+        trigger_type="web_workbench_command",
+    )
     record_audit(
         session,
         user_id=current_user.account.id,
         action="workbench.command_posted",
         target_type="repository",
         target_id=str(repository.id),
-        payload={"issue_number": issue_number, "command": parsed.command},
+        payload={"issue_number": issue_number, "command": parsed.command, "agent_run_id": run.id},
     )
     session.commit()
+    run_task_id = enqueue_agent_run(run)
     return {
         "status": "comment_posted",
         "comment": serialize_comment(comment),
         "command": parsed.to_dict(),
+        "agent_run_id": run.id,
+        "run_task_id": run_task_id,
     }
