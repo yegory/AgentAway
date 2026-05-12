@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Pocket Maintainer">
+  <rect width="512" height="512" rx="88" fill="#176b5d"/>
+  <path fill="#ffffff" d="M136 150h240v196c0 30-24 54-54 54H190c-30 0-54-24-54-54V150Zm48 52v144c0 3 3 6 6 6h132c3 0 6-3 6-6V202H184Z"/>
+  <path fill="#a7f3d0" d="M192 112h128c31 0 56 25 56 56v20h-48v-20c0-4-4-8-8-8H192c-4 0-8 4-8 8v20h-48v-20c0-31 25-56 56-56Z"/>
+  <path fill="#17202a" d="M214 251h84v38h-84z"/>
+</svg>

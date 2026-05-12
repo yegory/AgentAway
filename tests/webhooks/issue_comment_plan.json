@@ -1,0 +1,39 @@
+{
+  "action": "created",
+  "issue": {
+    "number": 184,
+    "title": "Login crashes on Safari",
+    "pull_request": null
+  },
+  "comment": {
+    "id": 9001,
+    "body": "/agent plan",
+    "user": {
+      "login": "octocat"
+    }
+  },
+  "repository": {
+    "id": 123456,
+    "name": "demo-repo",
+    "full_name": "octocat/demo-repo",
+    "private": true,
+    "default_branch": "main",
+    "owner": {
+      "login": "octocat"
+    }
+  },
+  "installation": {
+    "id": 424242,
+    "account": {
+      "login": "octocat",
+      "type": "User"
+    },
+    "permissions": {
+      "issues": "write",
+      "contents": "write"
+    }
+  },
+  "sender": {
+    "login": "octocat"
+  }
+}

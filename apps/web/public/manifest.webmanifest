@@ -1,0 +1,17 @@
+{
+  "name": "Pocket Maintainer",
+  "short_name": "Maintainer",
+  "description": "Mobile-first decision shell for supervised coding-agent runs.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f7f8fb",
+  "theme_color": "#176b5d",
+  "icons": [
+    {
+      "src": "/icons/pocket-maintainer.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
