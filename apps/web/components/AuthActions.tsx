@@ -1,6 +1,6 @@
 "use client";
 
-import { SignInButton, UserButton, useAuth } from "@clerk/nextjs";
+import { Show, SignInButton, SignUpButton, UserButton } from "@clerk/nextjs";
 import { CLERK_ENABLED } from "../lib/api";
 
 export function AuthActions() {
@@ -12,21 +12,23 @@ export function AuthActions() {
 }
 
 function ClerkAuthActions() {
-  const { isLoaded, isSignedIn } = useAuth();
-
-  if (!isLoaded) {
-    return <span className="pill warn">Loading</span>;
-  }
-
-  if (isSignedIn) {
-    return <UserButton />;
-  }
-
   return (
-    <SignInButton mode="modal">
-      <button className="nav-link" type="button">
-        Sign in
-      </button>
-    </SignInButton>
+    <>
+      <Show when="signed-out">
+        <SignInButton mode="modal">
+          <button className="nav-link" type="button">
+            Sign in
+          </button>
+        </SignInButton>
+        <SignUpButton mode="modal">
+          <button className="primary-action compact-action" type="button">
+            Sign up
+          </button>
+        </SignUpButton>
+      </Show>
+      <Show when="signed-in">
+        <UserButton />
+      </Show>
+    </>
   );
 }

@@ -153,10 +153,13 @@ Clerk values:
 
 ```bash
 NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=<clerk-publishable-key>
+CLERK_SECRET_KEY=<clerk-secret-key>
 CLERK_ISSUER=<clerk-issuer>
 CLERK_JWKS_URL=<clerk-jwks-url>
 CLERK_AUTHORIZED_PARTIES=https://your-web.example.com
 ```
+
+If you are running the Next.js app directly instead of Docker, put the public and secret Clerk keys in `apps/web/.env.local`. When using Docker Compose, keep them in the repo-root `.env` file so Compose passes them to the web container. The FastAPI service does not need `CLERK_SECRET_KEY`; it verifies Clerk session JWTs through `CLERK_ISSUER` or `CLERK_JWKS_URL`.
 
 GitHub App values:
 
@@ -192,6 +195,7 @@ ACCESS_TOKEN_MINUTES=15
 REFRESH_TOKEN_DAYS=30
 
 NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=<clerk-publishable-key>
+CLERK_SECRET_KEY=<clerk-secret-key>
 CLERK_ISSUER=<clerk-issuer>
 CLERK_JWKS_URL=<clerk-jwks-url>
 CLERK_AUTHORIZED_PARTIES=https://your-web.example.com
