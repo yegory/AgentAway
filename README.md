@@ -161,6 +161,12 @@ CLERK_AUTHORIZED_PARTIES=https://your-web.example.com
 
 If you are running the Next.js app directly instead of Docker, put the public and secret Clerk keys in `apps/web/.env.local`. When using Docker Compose, keep them in the repo-root `.env` file so Compose passes them to the web container. The FastAPI service does not need `CLERK_SECRET_KEY`; it verifies Clerk session JWTs through `CLERK_ISSUER` or `CLERK_JWKS_URL`.
 
+For Docker Compose, `NEXT_PUBLIC_*` values are also passed as web build arguments because Next.js inlines public environment variables into the browser bundle. After changing Clerk or API public env values, rebuild the web image:
+
+```bash
+docker compose up --build web
+```
+
 GitHub App values:
 
 ```bash
